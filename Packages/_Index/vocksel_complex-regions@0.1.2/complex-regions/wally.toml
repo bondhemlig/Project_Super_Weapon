@@ -1,0 +1,14 @@
+[package]
+name = "vocksel/complex-regions"
+description = "Define regions in an experience out of BaseParts of any shape or size"
+version = "0.1.2"
+authors = [ "David Minnerly <me@vocksel.com>" ]
+license = "MIT"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = [
+    "*.spec.lua"
+]
+
+[dependencies]
+TestEZ = "roblox/testez@0.4.1"

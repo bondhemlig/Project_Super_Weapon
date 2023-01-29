@@ -1,0 +1,11 @@
+[package]
+name = "eliasstenhammar/rojo"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+FastcastRedux = "encodedvenom/fastcastredux@0.1.3"
+Knit = "sleitnick/knit@1.4.7"
+Roact = "roblox/roact@1.4.4"
+ComplexRegions = "vocksel/complex-regions@0.1.2"

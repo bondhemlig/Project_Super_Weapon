@@ -23,33 +23,15 @@ local function findCharacters()
     return characters
 end
 
-local function FindTargets(GunnerSeat)
-    --local complexRegions = require(ReplicatedStorage.Packages.ComplexRegions)
-    --My hitbox part:
-    --hitbox.Size = Vector3.new(1000,1000,1000)
-    --hitbox.CFrame = script.Parent.CFrame * CFrame.new(Vector3.new(0,0,-700 ))
-	--hitbox.Orientation = Vector3.new(0, -45, 0)
-   
+local function FindTargets(startCFrame)
     local boxSize = Vector3.new(1000, 1000, 1000)
-    local box = GunnerSeat.CFrame * CFrame.new(Vector3.new(0, 0, -710)) * CFrame.Angles(0, math.rad(-45), 0)
-  
-    --game.Workspace:FindPartsInRegion3WithWhiteList() 
-    --local region = Region3.new(Vector3.new(spawner.Position.X - spawner.Size.X/2, spawner.Position.Y + spawner.Size.Y/2, spawner.Position.Z - spawner.Size.Z/2),
-    --Vector3.new(spawner.Position.X + spawner.Size.X/2, spawner.Position.Y + 4, spawner.Position.Z + spawner.Size.Z/2))
-    --local regionZone = Region3.new(Vector3.new(box.Position.X - 500, box.Position.Y + 500, box.Position.Z - 500), Vector3.new(box.Position.X + 500, box.Position.Y + 500, box.Position.Z + 500))
+    local box = startCFrame * CFrame.new(Vector3.new(0, 0, -710)) * CFrame.Angles(0, math.rad(-45), 0)
     local parameters = OverlapParams.new()
     parameters.MaxParts = 0
     parameters.CollisionGroup = "Default"
     parameters.FilterType = Enum.RaycastFilterType.Whitelist
     parameters.FilterDescendantsInstances = findCharacters()
     local objectsInSpace = game:GetService("Workspace"):GetPartBoundsInBox(box,boxSize,parameters)
-    --local objectsInPart = game:GetService("Workspace"):GetPartsInPart(test, parameters)
-    --local objectsInSphere = game:GetService("Workspace"):GetPartBoundsInRadius(box.Position, boxSize.Z, parameters)
-    --print("Objects in sphere", objectsInSphere)
-    print("Baseparts in box:", objectsInSpace)
-    --print("Objects in test part", objectsInPart)
-
-
     return objectsInSpace
 end
 
@@ -67,35 +49,142 @@ function GunnerSeat.new(seat)
     
 end
 
+local function createParticleEmitter()
+    local emitter = Instance.new("ParticleEmitter")
+    -- Number of particles = Rate * Lifetime
+    emitter.Rate = 5 -- Particles per second
+    emitter.Lifetime = NumberRange.new(1, 1) -- How long the particles should be alive (min, max)
+    emitter.Enabled = true
+
+    -- Visual properties
+    emitter.Texture = "rbxassetid://1266170131" -- A transparent image of a white ring
+    -- For Color, build a ColorSequence using ColorSequenceKeypoint
+    local colorKeypoints = {
+        -- API: ColorSequenceKeypoint.new(time, color)
+        ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)), -- At t=0, White
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(17, 0, 255)), -- At t=.5, Orange
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 110, 255)), -- At t=1, Red
+    }
+    emitter.Color = ColorSequence.new(colorKeypoints)
+    local numberKeypoints = {
+        -- API: NumberSequenceKeypoint.new(time, size, envelop)
+        NumberSequenceKeypoint.new(0, 1), -- At t=0, fully transparent
+        NumberSequenceKeypoint.new(0.1, 0), -- At t=.1, fully opaque
+        NumberSequenceKeypoint.new(0.5, 0.25), -- At t=.5, mostly opaque
+        NumberSequenceKeypoint.new(1, 1), -- At t=1, fully transparent
+    }
+    emitter.Transparency = NumberSequence.new(numberKeypoints)
+    emitter.LightEmission = 1 -- When particles overlap, multiply their color to be brighter
+    emitter.LightInfluence = 0 -- Don't be affected by world lighting
+
+    -- Speed properties
+    emitter.EmissionDirection = Enum.NormalId.Front -- Emit forwards
+    emitter.Speed = NumberRange.new(0, 0) -- Speed of zero
+    emitter.Drag = 0 -- Apply no drag to particle motion
+    emitter.VelocitySpread = NumberRange.new(0, 0)
+    emitter.VelocityInheritance = 0 -- Don't inherit parent velocity
+    emitter.Acceleration = Vector3.new(0, 0, 0)
+    emitter.LockedToPart = false -- Don't lock the particles to the parent
+    emitter.SpreadAngle = Vector2.new(0, 0) -- No spread angle on either axis
+
+    -- Simulation properties
+    local numberKeypoints2 = {
+        NumberSequenceKeypoint.new(0, 0), -- At t=0, size of 0
+        NumberSequenceKeypoint.new(1, 10), -- At t=1, size of 10
+    }
+    emitter.Size = NumberSequence.new(numberKeypoints2)
+    emitter.ZOffset = -1 -- Render slightly behind the actual position
+    emitter.Rotation = NumberRange.new(0, 360) -- Start at random rotation
+    emitter.RotSpeed = NumberRange.new(0) -- Do not rotate during simulation
+
+    -- Create an attachment so particles emit from the exact same spot (concentric rings)
+    local attachment = Instance.new("Attachment")
+    attachment.Position = Vector3.new(0, 5, 0) -- Move the attachment upwards a little
+    attachment.Parent = script.Parent
+    emitter.Parent = attachment
+    return attachment
+end
+
+local FastCast = require(ReplicatedStorage.Packages.FastcastRedux)
 
 function SuperWeaponService:Start()
-    print("Start")
     self:ConnectClientEvent("Fire", function(player, seat, power)
-        print("GO!")
-        local targetedBaseParts = FindTargets(seat)
+        local targetedBaseParts = FindTargets(seat.CFrame)
+
+        local rootParts, n = {}, 0
+        for _, basePart in ipairs(targetedBaseParts) do
+            if basePart.Name == "HumanoidRootPart" then
+                local rayOrigin = seat.Position
+                local rayDestination = basePart.Position
+                local rayDirection = rayDestination - rayOrigin
+                local params = RaycastParams.new()
+                params.FilterType = Enum.RaycastFilterType.Blacklist
+                params.FilterDescendantsInstances = {seat}
+                params.IgnoreWater = false
+                local raycastResult = workspace:Raycast(rayOrigin, rayDirection)      
+                if raycastResult.Result then
+                    if raycastResult.Result == basePart or raycastResult.Result.Parent:FindFirstChild(basePart.Name) or raycastResult.Result.Parent.Parent:FindFirstChild(basePart.Name) then
+                        rootParts[n] = basePart
+                        n += 1
+                    end
+                end
+            end
+        end
+        n = nil
+        targetedBaseParts = nil
 
         local start = seat:FindFirstChildOfClass("Attachment")
-        for i, basePart in ipairs(targetedBaseParts) do
-            --no targetting system right now?
-            --local thread = coroutine.create(function()
-            if basePart.Name == "Beskar" then
-                Debris:AddItem(basePart, 60)
-                basePart.Anchored = false
-            elseif basePart.Name == "HumanoidRootPart" then
-                self:FireClient("GuiTarget", player, basePart)
-                local beam = createBeam(start, basePart)
-                local wee = Instance.new("VectorForce")
-                wee.Force = Vector3.new(0, math.huge, 0)
-                wee.Parent = basePart
-                Debris:AddItem(wee, 2)
-                --run the rest on the client sides.
-                self:FireAllClients("OnHit", basePart.Parent)
-                print("ONHIT!!!!")
-            else
-                Debris:AddItem(basePart, math.random(3, 5))
+
+        for i, rootPart in ipairs(rootParts) do
+            local humanoid = rootPart.Parent:FindFirstChild("Humanoid")
+            self:FireClient("GuiTarget", player, rootPart, humanoid)
+            if humanoid then
+                humanoid.WalkSpeed = 0
+                humanoid.AutoRotate = false
             end
-           --end)
-            --coroutine.resume(thread)
+
+            local beam = createBeam(start, rootPart)
+            beam.Parent = rootPart
+            beam.Texture = ""
+
+            --Create up force
+            local wee = Instance.new("VectorForce")
+            wee.Force = Vector3.new(0, math.huge, 0)
+            wee.Parent = rootPart
+            Debris:AddItem(wee, 3)
+            local character = rootPart.Parent
+            self:FireAllClients("OnHit", character, power)--Client sided effects.
+            if power > 0.5 then
+                
+                for _, basePart in ipairs(character:GetDescendants()) do
+                    if basePart:IsA("BasePart") then
+                        if basePart.Name == "Beskar" then
+                            basePart.CanCollide = true
+                            basePart.Anchored = false
+                            Debris:AddItem(basePart, 60)
+                        else
+                            basePart.Material = Enum.Material.CrackedLava
+                            Debris:AddItem(basePart, math.random(3, 5))
+                        end
+                    elseif basePart:IsA("Hat") or basePart:IsA("Accessory") then
+                        Debris:AddItem(basePart, math.random(2, 5))
+                    end
+                end
+            else--stun
+                local attachment = createParticleEmitter()
+                attachment.Parent = seat
+                Debris:AddItem(attachment, 5) --stun duration
+                local connection 
+                connection = attachment.Destroying:Connect(function()
+                    if connection then
+                        connection:Disconnect()
+                        if humanoid then
+                           humanoid.WalkSpeed = 16
+                           humanoid.AutoRotate = true 
+                        end
+                    end
+                end)
+            end
         end
     end)
 

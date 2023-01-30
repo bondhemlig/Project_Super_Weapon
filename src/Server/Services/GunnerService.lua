@@ -49,7 +49,7 @@ function GunnerSeat.new(seat)
     
 end
 
-local function createParticleEmitter()
+local function createParticleEmitter(part)
     local emitter = Instance.new("ParticleEmitter")
     -- Number of particles = Rate * Lifetime
     emitter.Rate = 5 -- Particles per second
@@ -100,12 +100,20 @@ local function createParticleEmitter()
     -- Create an attachment so particles emit from the exact same spot (concentric rings)
     local attachment = Instance.new("Attachment")
     attachment.Position = Vector3.new(0, 5, 0) -- Move the attachment upwards a little
-    attachment.Parent = script.Parent
+    attachment.Parent = part
     emitter.Parent = attachment
     return attachment
 end
 
 local FastCast = require(ReplicatedStorage.Packages.FastcastRedux)
+local effects = game.Workspace:FindFirstChild("ParticleEffects") or game.ServerStorage.Effects
+
+local function addEffect(part, effect)
+    local e = effect:Clone()
+    e.Enabled = true
+    e.Parent = part
+    return e
+end
 
 function SuperWeaponService:Start()
     self:ConnectClientEvent("Fire", function(player, seat, power)
@@ -119,11 +127,12 @@ function SuperWeaponService:Start()
                 local rayDirection = rayDestination - rayOrigin
                 local params = RaycastParams.new()
                 params.FilterType = Enum.RaycastFilterType.Blacklist
-                params.FilterDescendantsInstances = {seat}
+                params.FilterDescendantsInstances = {seat, player.Character}
                 params.IgnoreWater = false
-                local raycastResult = workspace:Raycast(rayOrigin, rayDirection)      
-                if raycastResult.Result then
-                    if raycastResult.Result == basePart or raycastResult.Result.Parent:FindFirstChild(basePart.Name) or raycastResult.Result.Parent.Parent:FindFirstChild(basePart.Name) then
+                local raycastResult = workspace:Raycast(rayOrigin, rayDirection)
+                print(raycastResult)  
+                if raycastResult and raycastResult.Instance then
+                    if raycastResult.Instance == basePart or raycastResult.Instance.Parent:FindFirstChild(basePart.Name) or raycastResult.Instance.Parent.Parent:FindFirstChild(basePart.Name) then
                         rootParts[n] = basePart
                         n += 1
                     end
@@ -145,7 +154,7 @@ function SuperWeaponService:Start()
 
             local beam = createBeam(start, rootPart)
             beam.Parent = rootPart
-            beam.Texture = ""
+            beam.Texture = "rbxassetid://7151778302"
 
             --Create up force
             local wee = Instance.new("VectorForce")
@@ -160,19 +169,22 @@ function SuperWeaponService:Start()
                     if basePart:IsA("BasePart") then
                         if basePart.Name == "Beskar" then
                             basePart.CanCollide = true
+                            local particleEffect = addEffect(basePart, effects.Deletion.ArmorSparkle)
+                            if particleEffect then
+                                Debris:AddItem(particleEffect, 5)                                
+                            end
                             basePart.Anchored = false
                             Debris:AddItem(basePart, 60)
                         else
                             basePart.Material = Enum.Material.CrackedLava
-                            Debris:AddItem(basePart, math.random(3, 5))
+                            Debris:AddItem(basePart, math.random(4, 5))
                         end
                     elseif basePart:IsA("Hat") or basePart:IsA("Accessory") then
                         Debris:AddItem(basePart, math.random(2, 5))
                     end
                 end
             else--stun
-                local attachment = createParticleEmitter()
-                attachment.Parent = seat
+                local attachment = createParticleEmitter(rootPart)
                 Debris:AddItem(attachment, 5) --stun duration
                 local connection 
                 connection = attachment.Destroying:Connect(function()
